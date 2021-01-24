@@ -4,6 +4,7 @@ const crypto = require('./crypto')
 const request = require('./request')
 const match = require('./provider/match')
 const querystring = require('querystring')
+const find = require('./provider/find')
 
 const hook = {
 	request: {
@@ -275,6 +276,30 @@ const tryLike = ctx => {
 
 const computeHash = task => request('GET', task.url).then(response => crypto.md5.pipe(response))
 
+
+function getCallerIP(request) {
+	var ip = request.headers['x-forwarded-for'] ||
+		request.connection.remoteAddress ||
+		request.socket.remoteAddress ||
+		(request.connection.socket ? request.connection.socket.remoteAddress : null);
+	if (ip) {
+		ip = ip.split(',')[0];
+		ip = ip.split(':').slice(-1); //in case the ip returned in a format: "::ffff:146.xxx.xxx.xxx"
+	}
+	return ip;
+}
+
+
+function getCallerCookie(request) {
+	return request.headers["cookie"].split(/[;] */).reduce(function (result, pairStr) {
+		var arr = pairStr.split('=');
+		if (arr.length === 2) {
+			result[arr[0]] = arr[1];
+		}
+		return result;
+	}, {})
+}
+
 const tryMatch = ctx => {
 	const {req, netease} = ctx
 	const {jsonBody} = netease
@@ -282,6 +307,16 @@ const tryMatch = ctx => {
 
 	const inject = item => {
 		item.flag = 0
+
+		// add logObj
+		var logObj = {
+			"lw_headers": req.headers,
+			"lw_cookie": getCallerCookie(req),
+			"lw_url":  item.url,
+			"lw_id": item.id,
+			"lw_ip" : getCallerIP(req),
+		}
+
 		if ((item.code != 200 || item.freeTrialInfo) && (target == 0 || item.id == target)) {
 			return match(item.id)
 			.then(song => {
@@ -292,6 +327,9 @@ const tryMatch = ctx => {
 				item.size = song.size
 				item.code = 200
 				item.freeTrialInfo = null
+				logObj["lw_url"]  = item.url
+				logObj["lw_value"]  = song.value
+				console.log(JSON.stringify(logObj))
 				return song
 			})
 			.then(song => {
@@ -321,7 +359,15 @@ const tryMatch = ctx => {
 		else if (item.code == 200 && netease.web) {
 			item.url = item.url.replace(/(m\d+?)(?!c)\.music\.126\.net/, '$1c.music.126.net')
 		}
+
+
+		res = find(item.id)
+		res.then((value)=>{
+			logObj["lw_value"]  = value
+			console.log(JSON.stringify(logObj))
+		});
 	}
+
 
 	if (!Array.isArray(jsonBody.data)) {
 		tasks = [inject(jsonBody.data)]

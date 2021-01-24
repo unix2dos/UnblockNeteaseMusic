@@ -28,7 +28,9 @@ const match = (id, source) => {
 	.then(songs => {
 		songs = songs.filter(song => song.url)
 		if (!songs.length) return Promise.reject()
-		console.log(`[${meta.id}] ${meta.name}\n${songs[0].url}`)
+		// console.log(`[${meta.id}] ${meta.name}\n${songs[0].url}`)
+		songs[0].name = meta.name
+		songs[0].value = meta
 		return songs[0]
 	})
 }
